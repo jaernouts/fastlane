@@ -28,13 +28,25 @@ module Fastlane
                                        env_name: "FL_LCOV_SCHEME",
                                        description: "Scheme of the project"),
 
+          FastlaneCore::ConfigItem.new(key: :configuration,
+                                       env_name: "FL_LCOV_CONFIGURATION",
+                                       description: "Configuration of the project",
+                                       optional: true,
+                                       is_string: true,
+                                       default_value: "Debug"),
+
           FastlaneCore::ConfigItem.new(key: :output_dir,
                                        env_name: "FL_LCOV_OUTPUT_DIR",
                                        description: "The output directory that coverage data will be stored. If not passed will use coverage_reports as default value",
                                        optional: true,
                                        is_string: true,
-                                       default_value: "coverage_reports")
+                                       default_value: "coverage_reports"),
 
+          FastlaneCore::ConfigItem.new(key: :build_dir,
+                                       env_name: "FL_LCOV_BUILD_DIR",
+                                       description: "The build directory where lcov should look for the Derived Data",
+                                       optional: true,
+                                       is_string: true)
 
         ]
       end
@@ -46,33 +58,40 @@ module Fastlane
       private
 
         def self.gen_cov(options)
-          tmp_cov_file = "/tmp/coverage.info"
           output_dir = options[:output_dir]
+          tmp_cov_file = "#{output_dir}/coverage.info"
           derived_data_path = derived_data_dir(options)
 
-          system("lcov --capture --directory \"#{derived_data_path}\" --output-file #{tmp_cov_file}")
+          system("lcov --capture --directory \"#{derived_data_path}\" --output-file #{tmp_cov_file} --rc lcov_branch_coverage=1")
           system(gen_lcov_cmd(tmp_cov_file))
-          system("genhtml #{tmp_cov_file} --output-directory #{output_dir}")
+          system("genhtml #{tmp_cov_file} --output-directory #{output_dir} --branch-coverage --rc genhtml_branch_coverage=1")
         end
 
         def self.gen_lcov_cmd(cov_file)
           cmd = "lcov "
           exclude_dirs.each do |e|
-            cmd << "--remove #{cov_file} \"#{e}\" "
+            cmd << "--rc lcov_branch_coverage=1 --remove #{cov_file} \"#{e}\" "
           end
-          cmd << "--output #{cov_file} "
+          cmd << "--rc lcov_branch_coverage=1 --output #{cov_file} "
         end
 
         def self.derived_data_dir(options)
-           pn = options[:project_name]
-           sc = options[:scheme]
+          build_dir = options[:build_dir]
 
-           initial_path = "#{Dir.home}/Library/Developer/Xcode/DerivedData/"
-           end_path = "/Build/Intermediates/#{pn}.build/Debug-iphonesimulator/#{sc}.build/Objects-normal/i386/"
+          if build_dir.to_s == ''
+            pn = options[:project_name]
+            sc = options[:scheme]
+            cf = options[:configuration]
 
-           match = find_project_dir(pn,initial_path)
+            initial_path = "#{Dir.home}/Library/Developer/Xcode/DerivedData/"
+            end_path = "/Build/Intermediates/#{pn}.build/#{cf}-iphonesimulator/#{sc}.build/Objects-normal/x86_64/"
 
-           "#{initial_path}#{match}#{end_path}"
+            match = find_project_dir(pn,initial_path)
+
+            build_dir = "#{initial_path}#{match}#{end_path}"
+          end
+
+          "#{build_dir}"
         end
 
         def self.find_project_dir(project_name,path)
@@ -80,7 +99,7 @@ module Fastlane
         end
 
         def self.exclude_dirs
-          ["/Applications/*","/Frameworks/*"]
+          ["/Applications/*","/Frameworks/*","*/*Tests*/*"]
         end
 
     end
